@@ -115,35 +115,46 @@ const PrefsGrid = new GObject.Class({
             step_increment: 1,
             page_increment: 10
         });
-        let adjustment = new Gtk.Adjustment(adjustment_properties);
 
         spin_properties = Params.parse(spin_properties, {
-            adjustment: adjustment,
             numeric: true,
             digits: 4,
             snap_to_ticks: true
         }, true);
-        let spin_button = new Gtk.SpinButton(spin_properties);
 
-        spin_button.set_value(this._settings.get_double(key));
-        spin_button.connect('value-changed', (spin) => {
-            let value = spin.get_value();
+        // Use Entry instead of SpinButton to avoid scroll-event issues
+        let entry = new Gtk.Entry({
+            hexpand: false,
+            width_chars: 12,
+            max_width_chars: 12,
+            input_purpose: Gtk.InputPurpose.NUMBER
+        });
 
-            if(this._settings.get_double(key) !== value) {
-                this._settings.set_double(key, value);
+        // Set initial value with proper decimal places
+        let digits = spin_properties.digits || 0;
+        entry.set_text(this._settings.get_double(key).toFixed(digits));
+
+        entry.connect('changed', (widget) => {
+            let text = widget.get_text();
+            let value = parseFloat(text);
+
+            // Validate the input
+            if (text !== '' && !isNaN(value)) {
+                // Check bounds
+                if (value >= adjustment_properties.lower && value <= adjustment_properties.upper) {
+                    if(this._settings.get_double(key) !== value) {
+                        this._settings.set_double(key, value);
+                    }
+                }
             }
         });
 
-        // Disable scroll events to prevent accidental value changes
-        spin_button.connect('scroll-event', () => {
-            return true;
-        });
-
+        // Update entry when settings change externally
         this._settings.connect('change-event', (settings, key_set) => {
-          spin_button.set_value(this._settings.get_double(key));
+            entry.set_text(this._settings.get_double(key).toFixed(digits));
         });
 
-        return this.add_row(label, spin_button, true);
+        return this.add_row(label, entry, true);
     },
 
     add_row: function(text, widget, wrap) {

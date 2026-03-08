@@ -117,6 +117,52 @@ class Azan extends PanelMenu.Button {
         prayMenuItem.label.add_style_class_name('azan-prayer-name');
         prayMenuItem.label.set_x_expand(true);
 
+        // Add icon for each prayer time
+        let icon = null;
+        if (prayerId === 'fajr') {
+            icon = new St.Icon({
+                gicon: Gio.icon_new_for_string(Extension.path + '/media/sparkle-symbolic.svg'),
+                style_class: 'popup-menu-icon',
+                icon_size: 16
+            });
+        } else if (prayerId === 'sunrise') {
+            icon = new St.Icon({
+                gicon: Gio.icon_new_for_string(Extension.path + '/media/daytime-sunrise-symbolic.svg'),
+                style_class: 'popup-menu-icon',
+                icon_size: 16
+            });
+        } else if (prayerId === 'dhuhr') {
+            icon = new St.Icon({
+                gicon: Gio.icon_new_for_string(Extension.path + '/media/sun-symbolic.svg'),
+                style_class: 'popup-menu-icon',
+                icon_size: 16
+            });
+        } else if (prayerId === 'asr') {
+            icon = new St.Icon({
+                gicon: Gio.icon_new_for_string(Extension.path + '/media/afternoon-symbolic.svg'),
+                style_class: 'popup-menu-icon',
+                icon_size: 16
+            });
+        } else if (prayerId === 'sunset' || prayerId === 'maghrib') {
+            icon = new St.Icon({
+                gicon: Gio.icon_new_for_string(Extension.path + '/media/daytime-sunset-symbolic.svg'),
+                style_class: 'popup-menu-icon',
+                icon_size: 16
+            });
+        } else if (prayerId === 'isha') {
+            icon = new St.Icon({
+                gicon: Gio.icon_new_for_string(Extension.path + '/media/moon-symbolic.svg'),
+                style_class: 'popup-menu-icon',
+                icon_size: 16
+            });
+        } else if (prayerId === 'midnight') {
+            icon = new St.Icon({
+                gicon: Gio.icon_new_for_string(Extension.path + '/media/moon-stars-symbolic.svg'),
+                style_class: 'popup-menu-icon',
+                icon_size: 16
+            });
+        }
+
         let bin = new St.Bin({x_expand: true,x_align: Clutter.ActorAlign.END});
         bin.add_style_class_name('azan-prayer-time-bin');
 
@@ -129,7 +175,7 @@ class Azan extends PanelMenu.Button {
 
         this.menu.addMenuItem(prayMenuItem);
 
-        this._prayItems[prayerId] = { menuItem: prayMenuItem, label: prayLabel, labelWidget: prayMenuItem.label, timeBin: bin };
+        this._prayItems[prayerId] = { menuItem: prayMenuItem, label: prayLabel, labelWidget: prayMenuItem.label, timeBin: bin, icon: icon };
     };
 
     this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -301,37 +347,62 @@ class Azan extends PanelMenu.Button {
         let rtl = this._isArabic();
         let directionStyle = rtl ? 'direction: rtl;' : 'direction: ltr;';
 
-        this._dateMenuItem.actor.set_style(directionStyle);
+        if (rtl) {
+            // Keep Hijri date centered in Arabic mode.
+            this._dateMenuItem.actor.set_style(directionStyle + ' text-align: center;');
+            this._dateMenuItem.label.set_x_expand(true);
+            this._dateMenuItem.label.set_x_align(Clutter.ActorAlign.CENTER);
+            this._dateMenuItem.label.set_style('text-align: center;');
+        } else {
+            this._dateMenuItem.actor.set_style(directionStyle);
+            this._dateMenuItem.label.set_x_expand(false);
+            this._dateMenuItem.label.set_x_align(Clutter.ActorAlign.START);
+            this._dateMenuItem.label.set_style('');
+        }
 
         for (let prayerId in this._prayItems) {
             let prayerItem = this._prayItems[prayerId];
-            prayerItem.menuItem.actor.set_style(directionStyle);
+            // Keep row layout logic consistent with LTR and swap actor order for RTL.
+            prayerItem.menuItem.actor.set_style('direction: ltr;');
 
             // Swap columns: In Arabic, time comes first (left), then name (right)
             // In English, name comes first (left), then time (right)
             let container = prayerItem.menuItem.actor;
             
-            // Remove both actors
+            // Remove all actors
             container.remove_actor(prayerItem.labelWidget);
             container.remove_actor(prayerItem.timeBin);
+            if (prayerItem.icon) {
+                container.remove_actor(prayerItem.icon);
+            }
             
             if (rtl) {
-                // Arabic: time first, name second
+                // Arabic: time then text, with icon to the right of text.
                 container.add_actor(prayerItem.timeBin);
                 container.add_actor(prayerItem.labelWidget);
-                prayerItem.timeBin.set_style('margin-right: 0px; margin-left: 14px;');
-                prayerItem.labelWidget.x_align = Clutter.ActorAlign.END;
-                prayerItem.label.x_align = Clutter.ActorAlign.START;
-                prayerItem.timeBin.x_align = Clutter.ActorAlign.START;
+                if (prayerItem.icon) {
+                    container.add_actor(prayerItem.icon);
+                    prayerItem.icon.set_style('margin-left: 6px; margin-right: 0px;');
+                }
+                prayerItem.timeBin.set_style('margin-right: 20px; margin-left: 0px; padding-left: 0px; min-width: 0px;');
+                prayerItem.label.set_style('min-width: 0px; text-align: left;');
             } else {
-                // English: name first, time second
+                // English: icon then text then time.
+                if (prayerItem.icon) {
+                    container.add_actor(prayerItem.icon);
+                    prayerItem.icon.set_style('margin-right: 8px;');
+                }
                 container.add_actor(prayerItem.labelWidget);
                 container.add_actor(prayerItem.timeBin);
-                prayerItem.timeBin.set_style('margin-left: 14px; margin-right: 0px;');
-                prayerItem.labelWidget.x_align = Clutter.ActorAlign.START;
-                prayerItem.label.x_align = Clutter.ActorAlign.END;
-                prayerItem.timeBin.x_align = Clutter.ActorAlign.END;
+                prayerItem.timeBin.set_style('margin-left: 1px; margin-right: 0px; min-width: 84px;');
+                prayerItem.label.set_style('min-width: 84px; text-align: right;');
             }
+
+            prayerItem.labelWidget.set_style(rtl ? 'text-align: right;' : 'text-align: left;');
+            prayerItem.labelWidget.x_align = rtl ? Clutter.ActorAlign.END : Clutter.ActorAlign.START;
+            prayerItem.label.x_align = rtl ? Clutter.ActorAlign.START : Clutter.ActorAlign.END;
+            prayerItem.timeBin.x_align = rtl ? Clutter.ActorAlign.START : Clutter.ActorAlign.END;
+            prayerItem.timeBin.x_expand = !rtl;
         }
     }
 
@@ -395,7 +466,7 @@ class Azan extends PanelMenu.Button {
 
           let prayerTime = timesStr[prayerId];
 
-          this._prayItems[prayerId].label.text = prayerTime;
+          this._prayItems[prayerId].label.text = this._formatDisplayedTime(prayerTime);
 
           if (this._isPrayerTime(prayerId)) {
 
@@ -448,7 +519,7 @@ class Azan extends PanelMenu.Button {
          let reminderMsg = this._isArabic() 
              ? minDiffMinutes + " دقيقة متبقية حتى صلاة " + this._getPrayerName(nearestPrayerId)
              : minDiffMinutes + " minutes remaining until " + this._getPrayerName(nearestPrayerId) + " prayer.";
-         Main.notify(reminderMsg, _("Prayer time : " + timesStr[nearestPrayerId]));
+            Main.notify(reminderMsg, _("Prayer time : " + this._formatDisplayedTime(timesStr[nearestPrayerId])));
       }
           
       if (isTimeForPraying) {
@@ -458,10 +529,10 @@ class Azan extends PanelMenu.Button {
           let indicatorMsg = this._isArabic()
               ? "حان وقت صلاة " + this._getPrayerName(nearestPrayerId)
               : "It's time for " + this._getPrayerName(nearestPrayerId);
-          Main.notify(notificationMsg, _("Prayer time : " + timesStr[nearestPrayerId]));
+          Main.notify(notificationMsg, _("Prayer time : " + this._formatDisplayedTime(timesStr[nearestPrayerId])));
           this.indicatorText.set_text(indicatorMsg);
       } else {
-          this.indicatorText.set_text(this._getPrayerName(nearestPrayerId) + ' -' + this._formatRemainingTimeFromMinutes(minDiffMinutes));
+          this.indicatorText.set_text(this._getPrayerName(nearestPrayerId) + ' - ' + this._formatRemainingTimeFromMinutes(minDiffMinutes));
       }
   }
 
@@ -500,6 +571,15 @@ class Azan extends PanelMenu.Button {
             return this._timeNamesArabic[prayerId];
         }
         return this._timeNames[prayerId];
+    }
+
+    _formatDisplayedTime(timeText) {
+        if (!this._isArabic())
+            return timeText;
+
+        return timeText
+            .replace(/\bAM\b/gi, 'ص')
+            .replace(/\bPM\b/gi, 'م');
     }
   
     stop() {
