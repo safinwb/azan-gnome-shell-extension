@@ -17,10 +17,10 @@ Azan is an Islamic prayer times extension for Gnome Shell.
 - Full Arabic Support
 ### Installation
 
-1. clone this repository
-2. run `make && make install` inside main folder
-3. log out
-4. open Extension Manger -> enable "Islamic Prayer Times"
+1. Clone this repository
+2. Run `make && make install` inside main folder
+3. Log out and Log in back
+4. Open Extension Manger -> enable "Islamic Prayer Times"
 5. Enjoy!
 
 ### Changelog
