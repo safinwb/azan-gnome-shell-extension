@@ -60,5 +60,29 @@
       <summary>Language</summary>
       <description>Language for prayer time names (english or arabic)</description>
     </key>
+
+    <key type="b" name="show-countdown">
+      <default>true</default>
+      <summary>Show countdown</summary>
+      <description>Show remaining time countdown in the panel and next prayer section</description>
+    </key>
+
+    <key type="s" name="notifications">
+      <default>"10and5"</default>
+      <summary>Notifications</summary>
+      <description>Choose when reminder notifications should appear</description>
+    </key>
+
+    <key type="i" name="test-notification-seq">
+      <default>0</default>
+      <summary>Test notification sequence</summary>
+      <description>Increment to trigger a test notification from settings</description>
+    </key>
+
+    <key type="s" name="panel-position">
+      <default>"center"</default>
+      <summary>Panel position</summary>
+      <description>Choose panel indicator position (left, center, or right)</description>
+    </key>
   </schema>
 </schemalist>

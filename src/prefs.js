@@ -257,7 +257,7 @@ const AzanPrefsWidget = new GObject.Class({
     _init: function(params) {
         this.parent(params);
         this.set_orientation(Gtk.Orientation.VERTICAL);
-        this.set_size_request(620, 640);
+        this.set_size_request(620, 900);
         this._settings = Convenience.getSettings();
 
         let scrolled = new Gtk.ScrolledWindow({
@@ -374,6 +374,30 @@ const AzanPrefsWidget = new GObject.Class({
         maingrid.add_combo('Language', PrefsKeys.LANGUAGE, [
             {'title': 'English', 'value': 'english'},
             {'title': 'العربية (Arabic)', 'value': 'arabic'}
+        ], 'string');
+
+        maingrid.add_boolean('Show countdown', PrefsKeys.SHOW_COUNTDOWN);
+        maingrid.add_combo('Notifications', PrefsKeys.NOTIFICATIONS, [
+            {'title': 'None', 'value': 'none'},
+            {'title': '10 and 5 mins prior', 'value': '10and5'},
+            {'title': '5 mins prior', 'value': '5'},
+            {'title': '10 mins prior', 'value': '10'}
+        ], 'string');
+
+        let testNotificationButton = new Gtk.Button({
+            label: 'Send test notification',
+            halign: Gtk.Align.END
+        });
+        testNotificationButton.connect('clicked', () => {
+            let seq = this._settings.get_int(PrefsKeys.TEST_NOTIFICATION_SEQ);
+            this._settings.set_int(PrefsKeys.TEST_NOTIFICATION_SEQ, seq + 1);
+        });
+        maingrid.add_row('Test notification', testNotificationButton);
+
+        maingrid.add_combo('Panel position', PrefsKeys.PANEL_POSITION, [
+            {'title': 'Center', 'value': 'center'},
+            {'title': 'Left', 'value': 'left'},
+            {'title': 'Right', 'value': 'right'}
         ], 'string');
 
         maingrid.add_spin('Hijri date adjustment', PrefsKeys.HIJRI_DATE_ADJUSTMENT, {

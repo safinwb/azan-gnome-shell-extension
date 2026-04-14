@@ -8,3 +8,7 @@ var TIME_FORMAT_12 = 'time-format-12';
 var CONCISE_LIST = 'concise-list';
 var HIJRI_DATE_ADJUSTMENT = 'hijri-date-adjustment';
 var LANGUAGE = 'language';
+var SHOW_COUNTDOWN = 'show-countdown';
+var NOTIFICATIONS = 'notifications';
+var TEST_NOTIFICATION_SEQ = 'test-notification-seq';
+var PANEL_POSITION = 'panel-position';

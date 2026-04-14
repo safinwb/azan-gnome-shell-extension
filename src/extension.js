@@ -27,8 +27,17 @@ class Azan extends PanelMenu.Button {
   _init() {
     super._init(0.5, _('Azan'));
 
+    this.indicatorBox = new St.BoxLayout({ y_align: Clutter.ActorAlign.CENTER });
+    this.indicatorIcon = new St.Icon({
+        style_class: 'azan-panel-icon',
+        icon_size: 16,
+        y_align: Clutter.ActorAlign.CENTER
+    });
+    this.indicatorIcon.hide();
     this.indicatorText = new St.Label({text: _("Loading..."), y_align: Clutter.ActorAlign.CENTER});
-    this.add_child(this.indicatorText);
+    this.indicatorBox.add_child(this.indicatorIcon);
+    this.indicatorBox.add_child(this.indicatorText);
+    this.add_child(this.indicatorBox);
 
     this._gclueLocationChangedId = 0;
     this._weatherAuthorized = false;
@@ -42,6 +51,14 @@ class Azan extends PanelMenu.Button {
     this._opt_concise_list = null;
     this._opt_hijriDateAdjustment = null;
     this._opt_language = 'english';
+    this._opt_showCountdown = true;
+    this._opt_notifications = '10and5';
+    this._opt_panelPosition = 'center';
+    this._testNotificationSeq = 0;
+    this._notificationSource = null;
+    this._lastNextPrayerId = null;
+    this._lastNextPrayerMinutes = 0;
+    this._lastTimesStr = null;
 
     this._settings = Convenience.getSettings();
     this._bindSettings();
@@ -120,45 +137,10 @@ class Azan extends PanelMenu.Button {
 
         // Add icon for each prayer time
         let icon = null;
-        if (prayerId === 'fajr') {
+        let iconPath = this._getPrayerIconPath(prayerId);
+        if (iconPath) {
             icon = new St.Icon({
-                gicon: Gio.icon_new_for_string(Extension.path + '/media/sparkle-symbolic.svg'),
-                style_class: 'popup-menu-icon',
-                icon_size: 16
-            });
-        } else if (prayerId === 'sunrise') {
-            icon = new St.Icon({
-                gicon: Gio.icon_new_for_string(Extension.path + '/media/daytime-sunrise-symbolic.svg'),
-                style_class: 'popup-menu-icon',
-                icon_size: 16
-            });
-        } else if (prayerId === 'dhuhr') {
-            icon = new St.Icon({
-                gicon: Gio.icon_new_for_string(Extension.path + '/media/sun-symbolic.svg'),
-                style_class: 'popup-menu-icon',
-                icon_size: 16
-            });
-        } else if (prayerId === 'asr') {
-            icon = new St.Icon({
-                gicon: Gio.icon_new_for_string(Extension.path + '/media/afternoon-symbolic.svg'),
-                style_class: 'popup-menu-icon',
-                icon_size: 16
-            });
-        } else if (prayerId === 'sunset' || prayerId === 'maghrib') {
-            icon = new St.Icon({
-                gicon: Gio.icon_new_for_string(Extension.path + '/media/daytime-sunset-symbolic.svg'),
-                style_class: 'popup-menu-icon',
-                icon_size: 16
-            });
-        } else if (prayerId === 'isha') {
-            icon = new St.Icon({
-                gicon: Gio.icon_new_for_string(Extension.path + '/media/moon-symbolic.svg'),
-                style_class: 'popup-menu-icon',
-                icon_size: 16
-            });
-        } else if (prayerId === 'midnight') {
-            icon = new St.Icon({
-                gicon: Gio.icon_new_for_string(Extension.path + '/media/moon-stars-symbolic.svg'),
+                gicon: Gio.icon_new_for_string(iconPath),
                 style_class: 'popup-menu-icon',
                 icon_size: 16
             });
@@ -207,6 +189,32 @@ class Azan extends PanelMenu.Button {
     };
 
     this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+    this._nextPrayerMenuItem = new PopupMenu.PopupBaseMenuItem({
+        reactive: false, can_focus: false, hover: false, activate: false, style_class: 'azan-next-prayer'
+    });
+    this._nextPrayerSummaryBox = new St.BoxLayout({
+        x_expand: true,
+        x_align: Clutter.ActorAlign.CENTER,
+        y_align: Clutter.ActorAlign.CENTER
+    });
+    this._nextPrayerSummaryIcon = new St.Icon({
+        style_class: 'popup-menu-icon azan-next-prayer-icon',
+        icon_size: 16,
+        y_align: Clutter.ActorAlign.CENTER
+    });
+    this._nextPrayerRightSpacer = new St.Widget({
+        width: 22,
+        x_expand: false
+    });
+    this._nextPrayerSummaryLabel = new St.Label({
+        y_align: Clutter.ActorAlign.CENTER
+    });
+    this._nextPrayerSummaryBox.add_actor(this._nextPrayerSummaryIcon);
+    this._nextPrayerSummaryBox.add_actor(this._nextPrayerSummaryLabel);
+    this._nextPrayerSummaryBox.add_actor(this._nextPrayerRightSpacer);
+    this._nextPrayerMenuItem.actor.add_actor(this._nextPrayerSummaryBox);
+    this.menu.addMenuItem(this._nextPrayerMenuItem);
 
     this._applyLanguageLayout();
     this._updateLabelPeriodic();
@@ -313,6 +321,10 @@ class Azan extends PanelMenu.Button {
     this._opt_concise_list = this._settings.get_string(PrefsKeys.CONCISE_LIST);
     this._opt_hijriDateAdjustment = this._settings.get_double(PrefsKeys.HIJRI_DATE_ADJUSTMENT);
     this._opt_language = this._settings.get_string(PrefsKeys.LANGUAGE);
+    this._opt_showCountdown = this._settings.get_boolean(PrefsKeys.SHOW_COUNTDOWN);
+    this._opt_notifications = this._settings.get_string(PrefsKeys.NOTIFICATIONS);
+    this._opt_panelPosition = this._settings.get_string(PrefsKeys.PANEL_POSITION);
+    this._testNotificationSeq = this._settings.get_int(PrefsKeys.TEST_NOTIFICATION_SEQ);
   }  
   _bindSettings() {
     this._settings.connect('changed::' + PrefsKeys.AUTO_LOCATION, (settings, key) => {
@@ -371,6 +383,29 @@ class Azan extends PanelMenu.Button {
         this._updatePrayerMenuLabels();
         this._updateLabel();
     });
+
+    this._settings.connect('changed::' + PrefsKeys.SHOW_COUNTDOWN, (settings, key) => {
+        this._opt_showCountdown = settings.get_boolean(key);
+        this._updateLabel();
+    });
+
+    this._settings.connect('changed::' + PrefsKeys.NOTIFICATIONS, (settings, key) => {
+        this._opt_notifications = settings.get_string(key);
+    });
+
+    this._settings.connect('changed::' + PrefsKeys.TEST_NOTIFICATION_SEQ, (settings, key) => {
+        let seq = settings.get_int(key);
+        if (seq === this._testNotificationSeq)
+            return;
+
+        this._testNotificationSeq = seq;
+        this._triggerTestNotification();
+    });
+
+    this._settings.connect('changed::' + PrefsKeys.PANEL_POSITION, (settings, key) => {
+        this._opt_panelPosition = settings.get_string(key);
+        this._moveInPanel();
+    });
   }
 
     _isArabic() {
@@ -393,6 +428,10 @@ class Azan extends PanelMenu.Button {
             this._dateMenuItem.label.set_x_align(Clutter.ActorAlign.START);
             this._dateMenuItem.label.set_style('');
         }
+
+        this._nextPrayerMenuItem.actor.set_style('direction: ltr;');
+        this._nextPrayerSummaryBox.x_align = Clutter.ActorAlign.CENTER;
+        this._nextPrayerSummaryLabel.set_style('text-align: center;');
 
         for (let prayerId in this._prayItems) {
             let prayerItem = this._prayItems[prayerId];
@@ -472,9 +511,6 @@ class Azan extends PanelMenu.Button {
   }
 
   _updateLabel() {
-      let displayDate = GLib.DateTime.new_now_local();
-      let dateFormattedFull = displayDate.format(this._dateFormatFull);
-
       let myLocation = [this._opt_latitude, this._opt_longitude];
       let myTimezone = this._opt_timezone;
       this._prayTimes.setMethod(this._opt_calculationMethod);
@@ -565,6 +601,11 @@ class Azan extends PanelMenu.Button {
           }
       };
 
+      if (!nearestPrayerId)
+          nearestPrayerId = 'fajr';
+      if (minDiffMinutes === Number.MAX_VALUE)
+          minDiffMinutes = 0;
+
       // Highlight the prayer one before the next prayer
       const prayerOrder = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
       let highlightedPrayerId = nearestPrayerId;
@@ -613,26 +654,206 @@ class Azan extends PanelMenu.Button {
       let outputIslamicDate = this._formatHijriDate(hijriDate);
       
       this._dateMenuItem.label.text = outputIslamicDate;
+
+      this._setNextPrayerSummary(nearestPrayerId, this._getNextPrayerMenuText(nearestPrayerId, minDiffMinutes));
       
-      if ( (minDiffMinutes === 15) || (minDiffMinutes === 10) || (minDiffMinutes === 5) ) {
-         let reminderMsg = this._isArabic() 
-             ? minDiffMinutes + " دقيقة متبقية حتى صلاة " + this._getPrayerName(nearestPrayerId)
-             : minDiffMinutes + " minutes remaining until " + this._getPrayerName(nearestPrayerId) + " prayer.";
-            Main.notify(reminderMsg, _("Prayer time : " + this._formatDisplayedTime(timesStr[nearestPrayerId])));
+      if ((minDiffMinutes === 10) || (minDiffMinutes === 5)) {
+          this._notifyReminder(nearestPrayerId, minDiffMinutes, timesStr);
       }
-          
-      if (isTimeForPraying) {
-          let notificationMsg = this._isArabic()
-              ? "حان وقت صلاة " + this._getPrayerName(nearestPrayerId)
-              : "It's time for the " + this._getPrayerName(nearestPrayerId) + " prayer.";
-          let indicatorMsg = this._isArabic()
-              ? "حان وقت صلاة " + this._getPrayerName(nearestPrayerId)
-              : "It's time for " + this._getPrayerName(nearestPrayerId);
-          Main.notify(notificationMsg, _("Prayer time : " + this._formatDisplayedTime(timesStr[nearestPrayerId])));
-          this.indicatorText.set_text(indicatorMsg);
-      } else {
-          this.indicatorText.set_text(this._getPrayerName(nearestPrayerId) + ' - ' + this._formatRemainingTimeFromMinutes(minDiffMinutes));
+
+      let panelText = this._getPrayerName(nearestPrayerId) + ' ' + this._formatDisplayedTime(timesStr[nearestPrayerId]);
+      if (this._opt_showCountdown) {
+          panelText += ' - ' + (this._isArabic() ? 'متبقي ' : 'in ') + this._formatRemainingTimeFromMinutes(minDiffMinutes);
       }
+      this._setPanelIndicator(nearestPrayerId, panelText);
+
+      this._lastNextPrayerId = nearestPrayerId;
+      this._lastNextPrayerMinutes = minDiffMinutes;
+      this._lastTimesStr = timesStr;
+  }
+
+  _getNextPrayerMenuText(prayerId, minDiffMinutes) {
+      if (this._isArabic())
+          return this._getPrayerName(prayerId) + ' خلال ' + this._formatDurationInWords(minDiffMinutes);
+
+      return this._getPrayerName(prayerId) + ' in ' + this._formatDurationInWords(minDiffMinutes);
+  }
+
+  _setNextPrayerSummary(prayerId, text) {
+      this._nextPrayerSummaryLabel.text = text;
+
+      let iconPath = this._getPrayerIconPath(prayerId);
+      if (!iconPath) {
+          this._nextPrayerSummaryIcon.hide();
+          this._nextPrayerRightSpacer.width = 0;
+          return;
+      }
+
+      this._nextPrayerSummaryIcon.gicon = Gio.icon_new_for_string(iconPath);
+      this._nextPrayerSummaryIcon.show();
+      this._nextPrayerRightSpacer.width = 22;
+  }
+
+  _formatDurationInWords(diffMinutes) {
+      if (this._isArabic())
+          return this._formatRemainingTimeFromMinutes(diffMinutes);
+
+      if (diffMinutes < 60)
+          return diffMinutes + (diffMinutes === 1 ? ' minute' : ' minutes');
+
+      let hours = ~~(diffMinutes / 60);
+      let minutes = ~~(diffMinutes % 60);
+      if (minutes === 0)
+          return hours + (hours === 1 ? ' hour' : ' hours');
+
+      return hours + (hours === 1 ? ' hour ' : ' hours ') + minutes + (minutes === 1 ? ' minute' : ' minutes');
+  }
+
+  _notifyReminder(prayerId, minDiffMinutes, timesStr) {
+      if (!this._shouldNotifyAt(minDiffMinutes))
+          return;
+
+      let prayerName = this._getPrayerName(prayerId);
+      let prayerTimeText = this._formatDisplayedTime(timesStr[prayerId]);
+      let reminderMsg = this._isArabic()
+          ? minDiffMinutes + " دقيقة متبقية حتى صلاة " + prayerName
+          : minDiffMinutes + " minutes remaining until " + prayerName + " prayer.";
+      this._showSystemNotification(prayerId, reminderMsg, _("Prayer time : " + prayerTimeText));
+  }
+
+  _shouldNotifyAt(minDiffMinutes) {
+      if (this._opt_notifications === 'none')
+          return false;
+      if (this._opt_notifications === '10and5')
+          return minDiffMinutes === 10 || minDiffMinutes === 5;
+      if (this._opt_notifications === '10')
+          return minDiffMinutes === 10;
+      if (this._opt_notifications === '5')
+          return minDiffMinutes === 5;
+      return false;
+  }
+
+  _triggerTestNotification() {
+      let prayerId = this._lastNextPrayerId || 'maghrib';
+      let minutes = this._lastNextPrayerMinutes || 10;
+      let timesStr = this._lastTimesStr || {};
+
+      let title = this._getNextPrayerMenuText(prayerId, minutes);
+      let fallbackPrayerTime = '';
+      if (this._prayItems[prayerId] && this._prayItems[prayerId].originalTime)
+          fallbackPrayerTime = this._prayItems[prayerId].originalTime;
+      let prayerTimeText = timesStr[prayerId]
+          ? this._formatDisplayedTime(timesStr[prayerId])
+          : this._formatDisplayedTime(fallbackPrayerTime);
+      let subtitle = this._isArabic()
+          ? 'وقت الصلاة: ' + prayerTimeText
+          : 'Prayer time: ' + prayerTimeText;
+
+      this._showSystemNotification(prayerId, title, subtitle);
+  }
+
+  _showSystemNotification(prayerId, title, subtitle) {
+      let iconPath = this._getPrayerIconPath(prayerId);
+      let gicon = iconPath ? Gio.icon_new_for_string(iconPath) : null;
+
+      try {
+          if (!this._notificationSource) {
+              this._notificationSource = new MessageTray.Source(_('Azan'), 'dialog-information-symbolic');
+              this._notificationSource.connect('destroy', () => {
+                  this._notificationSource = null;
+              });
+              Main.messageTray.add(this._notificationSource);
+          }
+
+          let notification;
+          try {
+              notification = new MessageTray.Notification(this._notificationSource, title, subtitle, gicon ? { gicon } : {});
+          } catch (innerError) {
+              notification = new MessageTray.Notification(this._notificationSource, title, subtitle);
+              if (gicon && notification.set)
+                  notification.set({ gicon });
+          }
+
+          notification.setTransient(true);
+          this._notificationSource.showNotification(notification);
+      } catch (e) {
+          Main.notify(title, subtitle);
+      }
+  }
+
+  _clearSystemNotificationSource() {
+      if (this._notificationSource) {
+          this._notificationSource.destroy();
+          this._notificationSource = null;
+      }
+  }
+
+  getPanelPosition() {
+      if (this._opt_panelPosition === 'left')
+          return 'left';
+      if (this._opt_panelPosition === 'right')
+          return 'right';
+      return 'center';
+  }
+
+  _moveInPanel() {
+      if (!this.container)
+          return;
+
+      let panelPosition = this.getPanelPosition();
+      let targetBox = Main.panel._centerBox;
+      if (panelPosition === 'left')
+          targetBox = Main.panel._leftBox;
+      else if (panelPosition === 'right')
+          targetBox = Main.panel._rightBox;
+      if (!targetBox)
+          return;
+
+      let parent = this.container.get_parent();
+      if (!parent || parent === targetBox)
+          return;
+
+      if (parent.remove_actor)
+          parent.remove_actor(this.container);
+      else
+          parent.remove_child(this.container);
+
+      let targetIndex = Math.min(1, targetBox.get_n_children());
+      if (targetBox.insert_child_at_index)
+          targetBox.insert_child_at_index(this.container, targetIndex);
+      else
+          targetBox.add_actor(this.container);
+  }
+
+  _setPanelIndicator(prayerId, text) {
+      this.indicatorText.set_text(text);
+
+      let iconPath = this._getPrayerIconPath(prayerId);
+      if (!iconPath) {
+          this.indicatorIcon.hide();
+          return;
+      }
+
+      this.indicatorIcon.gicon = Gio.icon_new_for_string(iconPath);
+      this.indicatorIcon.show();
+  }
+
+  _getPrayerIconPath(prayerId) {
+      if (prayerId === 'fajr')
+          return Extension.path + '/media/sparkle-symbolic.svg';
+      if (prayerId === 'sunrise')
+          return Extension.path + '/media/daytime-sunrise-symbolic.svg';
+      if (prayerId === 'dhuhr')
+          return Extension.path + '/media/sun-symbolic.svg';
+      if (prayerId === 'asr')
+          return Extension.path + '/media/afternoon-symbolic.svg';
+      if (prayerId === 'sunset' || prayerId === 'maghrib')
+          return Extension.path + '/media/daytime-sunset-symbolic.svg';
+      if (prayerId === 'isha')
+          return Extension.path + '/media/moon-symbolic.svg';
+      if (prayerId === 'midnight')
+          return Extension.path + '/media/moon-stars-symbolic.svg';
+      return null;
   }
 
   _calculateSecondsFromDate(date) {
@@ -805,6 +1026,8 @@ class Azan extends PanelMenu.Button {
             }
         }
 
+        this._clearSystemNotificationSource();
+
 		if (this._periodicTimeoutId) {
         Mainloop.source_remove(this._periodicTimeoutId);
   		}
@@ -818,7 +1041,7 @@ function init() {
 
 function enable() {
   azan = new Azan();
-  Main.panel.addToStatusArea('azan', azan, 1, 'center');
+  Main.panel.addToStatusArea('azan', azan, 1, azan.getPanelPosition());
 }
 
 function disable() {

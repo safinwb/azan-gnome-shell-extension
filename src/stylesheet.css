@@ -6,6 +6,14 @@
   color: #ffffff;
 }
 
+.azan-panel-icon {
+  margin-right: 6px;
+}
+
+.azan-next-prayer-icon {
+  margin-right: 6px;
+}
+
 .azan-prayer-item {
   color: #ffffff;
   padding: 6px 10px;
